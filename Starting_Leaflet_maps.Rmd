@@ -13,6 +13,9 @@ Get the Libraries
 Run these two things:
 - install.packages("leaflet")
 ```{r}
+install.packages("leaflet",repos = "http://cran.us.r-project.org")
+```
+```{r}
 library(leaflet)
 ```
 
