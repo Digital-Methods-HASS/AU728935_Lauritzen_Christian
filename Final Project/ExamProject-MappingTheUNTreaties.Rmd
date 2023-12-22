@@ -1,0 +1,142 @@
+---
+title: "ExamProject - Mapping the UN Treaties"
+author: "Christian Lauritzen & Christoffer Brødsted"
+date: "`r Sys.Date()`"
+output: html_document
+---
+The following code is made by inspiration of this project on similar mapping of data: https://www.sharpsightlabs.com/blog/map-talent-competitiveness/ 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Starting by reading in the Packages and libraries:
+```{r}
+library(tidyverse)
+library(rvest)
+library(magrittr)
+library(ggmap)
+library(stringr)
+library(maps)
+library(dplyr)
+library(ggplot2)
+```
+
+We start by getting our data from the United Nations Treaty Collection website and specifying exactly what part of the website data we want:
+```{r}
+UN_Data<- read_html("https://treaties.un.org/Pages/ViewDetails.aspx?src=TREATY&mtdsg_no=IV-1&chapter=4&clang=_en", na=c("NULL"))
+
+UN_Data_raw <- UN_Data %>% 
+  html_nodes("table") %>%
+  extract2(11) %>%
+  html_table()
+```
+
+This gives us the UN_Data_raw which looks like this:
+```{r}
+view(UN_Data_raw)
+```
+
+We now have a tibble of the countries who have signed the treaty, signature dates for a few of the countries and when they signed it. 
+
+Before we go further with the UN_Data_raw, we are now going to grab the Map_data("World") which contains the base data for the final product and a list of all the countries in the world with that coordinates and specific data
+```{r}
+World_map <- map_data("world")
+```
+
+What we want to do is create a combined dataset combining the UN-Data_raw and our World_map, but before that we will adapt the UN_Data_raw to contain a value for the countries listed, we will use this later on. 
+We do this by taking the "X3" category which had the date of the signatures and modify it to give all the countries a value of 1
+We also rename the two categories we are going to use.
+
+```{r}
+UN_Data_final <- UN_Data_raw %>% select(X1, X3) %>% rename(country = X1, new_col = X3) %>% 
+  mutate(new_col=c(T))
+```
+
+Before we can join these two data sets together we first have to adapt some of the country names to fit with the names in Map_Data or else we would end up with a mess that wouldnt be able to be joined correctly. By having the two lists have an identical lists of countries it makes us able to use that list as a basis for joining the two data sets together. 
+We do this by finding out all the countries that have a different name in the two data sets and change the names in UN_Data_final to fit with Map_data:
+```{r}
+UN_Data_final$country <- recode(UN_Data_final$country
+                                   ,'United States of America' = 'USA'
+                                   ,'United Kingdom' = 'UK'
+                                   ,'Antigua and Barbuda'='Antigua'
+                                   ,'Bolivia (Plurinational State of)'='Bolivia'
+                                   , 'Czech Republic 4'='Czech Republic'
+                                   , 'Germany 11, 12, 13'='Germany'
+                                   , "Bosnia and Herzegovina 2, 4" = "Bosnia and Herzegovina"
+                                   , "China 5, 6, 7" = "China"
+                                   , "Côte d'Ivoire"='Ivory Coast'
+                                   , 'Croatia 2'='Croatia'
+                                   , "Holy See"="Vatican"
+                                   , "Iran (Islamic Republic of)"="Iran"
+                                   , "Netherlands (Kingdom of the)"="Netherlands"
+                                   , "North Macedonia 2"="North Macedonia"
+                                   , "Portugal 3"="Portugal"
+                                   , "Republic of Moldova"="Moldova"
+                                   , "Republic of Korea"="South Korea"
+                                   , "Russian Federation"="Russia"
+                                   , "Serbia 2"="Serbia"
+                                   , "Slovakia 4"="Slovakia"
+                                   , "Slovenia 2"="Slovenia"
+                                   , "St. Kitts and Nevis"="Saint Kitts"
+                                   , "St. Vincent and the Grenadines"="Saint Vincent"
+                                   , "Sutiname 7"="Suriname"
+                                   , "Trinidad and Tobago"="Trinidad"
+                                   , "Tuvalu 8"="Tuvalu"
+                                   , "Ukraine 9"="Ukraine"
+                                   , "United Kingdom of Great Britain and Northern Ireland"="UK"
+                                   , "Yemen 10"="Yemen"
+                                   , "United Republic of Tanzania"="Tanzania"
+                                   , "Congo"="Republic of Congo"
+                                   , "Türkiye"="Turkey"
+                                   , "Argentina 3" = "Argentina"
+                                   , "Cuba 8" = "Cuba"
+                                   , "Cyprus 9" = "Cyprus"
+                                   , "Czech Republic 10" = "Czech Republic"
+                                   , "Yemen 19" = "Yemen"
+                                   , "Viet Nam 17, 18" = "Vietnam"
+                                   , "Slovakia 10" = "Slovakia"
+                                   , "Lao People's Democratic Republic" = "Laos"
+                                   , "Montenegro 14" = "Montenegro"
+                                   , "New Zealand 15" = "New Zealand"
+                                   , "Democratic People's Republic of Korea" = "North Korea"
+                                   , "Portugal 7" = "Portugal"
+                                   , "Serbia 4, 16" = "Serbia"
+                                   , "Venezuela (Bolivarian Republic of)" = "Venezuela"
+                                   , "Syrian Arab Republic" = "Syria"
+                                   , "State of Palenstine" = "Palenstine"
+)
+```
+
+Now that we have two datasets which both have a country column where the country names are identical, we can now join the two datasets together into a combined one, by using the two country columns as the center:
+
+```{r}
+world_map_joined <- left_join(World_map, UN_Data_final, by = c('region' = 'country'))
+```
+
+Now we mutate the new data set to take advantage of the new "new_col" which is only applied to the countries from our UN data list. We mutate them to give every country that has a value in "new_col" to be labeled as TRUE and every country that isn't as FALSE. By doing this we can now assign the two different kinds of countries different colors:
+
+```{r}
+world_map_joined <- world_map_joined %>% 
+  mutate(fill_flg = ifelse(is.na(new_col),F,T))
+```
+
+Now we can use the final, mutated world_map_joined to create our map: 
+
+```{r}
+ggplot() +
+  geom_polygon(data = world_map_joined, aes(x = long, y = lat, group = group, fill = fill_flg)) +
+  scale_fill_manual(values = c("#e60000","#33CC66")) +
+  labs(title = 'UN_Treaty Chapter 4 Subsection 1'
+       ,subtitle = "Data acquired from https://treaties.un.org/Pages/ViewDetails.aspx?src=TREATY&mtdsg_no=IV-1&chapter=4&clang=_en") +
+  theme(text = element_text(family = "serif", color = "#FFFFFF")
+        ,panel.background = element_rect(fill = "#666666")
+        ,plot.background = element_rect(fill = "#666666")
+        ,panel.grid = element_blank()
+        ,plot.title = element_text(size = 20)
+        ,plot.subtitle = element_text(size = 6)
+        ,axis.text = element_blank()
+        ,axis.title = element_blank()
+        ,axis.ticks = element_blank()
+        ,legend.position = "none")
+```
